@@ -1,10 +1,11 @@
+# As senhas vêm do arquivo .env (copie de .env.example). O Compose não sobe se alguma estiver faltando.
 services:
   db:
     image: postgres:12-alpine
     environment:
       POSTGRES_DB: geladeira_lab
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: laboratorio_postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no arquivo .env}
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -21,9 +22,12 @@ services:
     environment:
       DB_URL: jdbc:postgresql://db:5432/geladeira_lab
       DB_USER: fridge_app
-      DB_PASSWORD: training-only
+      DB_PASSWORD: ${DB_PASSWORD:?defina DB_PASSWORD no arquivo .env}
       MIGRATION_USER: postgres
-      MIGRATION_PASSWORD: laboratorio_postgres
+      MIGRATION_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no arquivo .env}
+      TEACHER_PASSWORD: ${TEACHER_PASSWORD:?defina TEACHER_PASSWORD no arquivo .env}
+      STUDENT_PASSWORD: ${STUDENT_PASSWORD:?defina STUDENT_PASSWORD no arquivo .env}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
       FIRMWARE_URL: http://firmware:8081
     ports:
       - "127.0.0.1:8082:8080"

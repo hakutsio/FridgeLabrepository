@@ -1,43 +1,69 @@
 # Fridge Lab — revisão de segurança
 
-Essa aplicação é um sistema  para configurar geladeiras, desenvolvido de forma didática para praticas de segurança.
-Teste educacional
+Sistema didático para cadastrar e configurar uma frota de geladeiras simuladas, usado em práticas de Segurança da Informação. Teste educacional.
 
-Tecnologias usadas: Spring Boot, PostgreSQL, Flyway, React e um firmware em contêiner separado. 
+Tecnologias: Spring Boot, PostgreSQL, Flyway, React e um simulador de firmware em contêiner separado.
 
 ## Execução local
 
-```bash
-docker compose up --build
-```
+1. Copie o arquivo de exemplo e **troque todas as senhas**:
 
-Interface: http://localhost:3002 · API: http://localhost:8082 · Swagger UI: http://localhost:8082/swagger-ui/index.html
+   ```bash
+   cp .env.example .env
+   ```
 
-Também é possível abrir o Swagger pelo frontend em http://localhost:3002/swagger-ui/index.html. As rotas `/` e `/api` exibem as informações da API; os endpoints de dados continuam exigindo Basic Auth. Se o banco já foi iniciado antes de uma alteração de migration, recrie-o com `docker compose down -v` antes de subir novamente.
-A API exige Basic Auth. Usuários didáticos: `teacher`/`laboratorio-teacher` (dispositivos 1–2) e `student`/`laboratorio-student` (dispositivo 3), 
-Para restaurar os dados: `docker compose down -v` e suba novamente.
+2. Suba o laboratório:
+
+   ```bash
+   docker compose up --build
+   ```
+
+Interface: http://localhost:3002 · API: http://localhost:8082
+
+O `.env` está no `.gitignore`: nenhuma senha real fica no repositório. Se alguma variável estiver faltando, o Compose avisa e não sobe.
+
+Se o banco já foi criado antes com outras senhas, recrie-o com `docker compose down -v` antes de subir de novo. O mesmo comando restaura os dados de exemplo.
+
+## Login e perfis
+
+O site abre com uma tela de login. Existem dois usuários, com perfis diferentes:
+
+| Usuário | Perfil | Senha | Geladeiras |
+|---|---|---|---|
+| `teacher` | Professor (`TEACHER`) | `TEACHER_PASSWORD` do `.env` | 12 (IDs 1, 2 e 4 a 13) |
+| `student` | Aluno (`STUDENT`) | `STUDENT_PASSWORD` do `.env` | 8 (IDs 3 e 14 a 20) |
+
+Cada usuário vê e altera apenas as próprias geladeiras. Só o professor acessa a documentação Swagger.
+
+As senhas ficam guardadas na API com BCrypt. O site não tem nenhuma senha no código; ele usa apenas o que a pessoa digita no login.
+
+## Documentação da API (Swagger)
+
+O Swagger fica **desligado por padrão**. Para usar em desenvolvimento, coloque `SWAGGER_ENABLED=true` no `.env` e acesse http://localhost:8082/swagger-ui/index.html com o login do professor. O Swagger não é repassado pelo site (porta 3002).
 
 ## Acesso pelo DBeaver
 
-O Compose publica o PostgreSQL somente em `127.0.0.1`, para uso local pelo DBeaver. Crie uma conexão PostgreSQL com os valores abaixo:
+O PostgreSQL é publicado somente em `127.0.0.1`.
 
 | Campo | Valor |
 |---|---|
-| Host | `localhost` ou `127.0.0.1` |
+| Host | `localhost` |
 | Port | `5432` |
 | Database | `geladeira_lab` |
-| Username | `postgres` |
-| Password | `laboratorio_postgres` |
-| SSL mode | `disable` |
+| Username | `postgres` (administrador) ou `fridge_app` (conta do sistema) |
+| Password | `POSTGRES_PASSWORD` ou `DB_PASSWORD` do `.env` |
 
-Após o primeiro `docker compose up --build`, também existe a conta operacional `fridge_app` com senha `training-only`. Ela possui apenas permissões de leitura/atualização da tabela de dispositivos; para inspecionar migrations e schema use `postgres`. Se a porta 5432 já estiver ocupada por outro PostgreSQL, encerre o serviço local antes de subir o laboratório.
+A conta `fridge_app` tem `SELECT`, `INSERT`, `UPDATE` e `DELETE` apenas na tabela `fridge_devices` (as duas últimas foram adicionadas na migration V5). Use `postgres` só para inspecionar migrations e o schema.
+
+A migration V6 troca a senha de `fridge_app` pelo valor de `DB_PASSWORD`, porque a senha antiga estava escrita na V2 e continua no histórico do Git.
 
 ## Rotas principais
 
-Todas as rotas abaixo usam Basic Auth, exceto `/`, `/api`, `/swagger-ui/**` e `/v3/api-docs/**`.
+Todas exigem login, exceto `/` e `/api`, que só mostram o status da API.
 
 | Método | Rota | Uso |
 |---|---|---|
+| GET | `/api/me` | Usuário logado e perfil (usado pela tela de login) |
 | GET | `/api/devices?name=Hub` | Listar e buscar geladeiras do usuário |
 | GET | `/api/devices/{id}` | Consultar uma geladeira |
 | POST | `/api/devices` ou `/api/devices/register` | Cadastrar uma geladeira |
@@ -73,4 +99,9 @@ Exemplo para aplicar uma configuração no firmware:
 }
 ```
 
-O banco é populado pela migration `V4__seed_twenty_fridges.sql` com 20 itens fictícios, cidades, países, latitude/longitude e um sketch C++ de exemplo. O frontend tem telas independentes para visão geral/mapa, lista e CRUD, cadastro e laboratório de firmware.
+O banco é populado pela migration `V4__seed_twenty_fridges.sql` com 20 geladeiras fictícias. O frontend tem telas de visão geral/mapa, lista e CRUD, cadastro e laboratório de firmware.
+
+## Limitações conhecidas
+
+- O simulador de firmware (porta 8081, rede interna do Docker) não exige autenticação.
+- Não há limite de tentativas de login nem HTTPS; use apenas em ambiente local.
