@@ -19,9 +19,8 @@ type FirmwareState = {
   >;
 };
 type Route = "dashboard" | "devices" | "register" | "firmware";
-const auth = (user: string) => ({
-  Authorization: `Basic ${btoa(`${user}:${user === "teacher" ? "laboratorio-teacher" : "laboratorio-student"}`)}`,
-});
+type Session = { username: string; role: string; authorization: string };
+const roleLabel = (role: string) => (role === "TEACHER" ? "Professor" : "Aluno");
 const emptyForm = {
   name: "",
   temperatureC: "4",
@@ -38,14 +37,18 @@ export default function App() {
   const [route, setRoute] = useState<Route>(
       (location.hash.slice(1) as Route) || "dashboard",
     ),
-    [user, setUser] = useState("teacher"),
+    [session, setSession] = useState<Session | null>(null),
     [devices, setDevices] = useState<Fridge[]>([]),
     [firmware, setFirmware] = useState<FirmwareState>({ devices: {} }),
     [selected, setSelected] = useState<Fridge | null>(null),
     [search, setSearch] = useState(""),
     [message, setMessage] = useState(""),
     [form, setForm] = useState<any>(emptyForm);
-  const headers = auth(user);
+  // Usa somente a senha digitada no login, guardada apenas na memória da aba.
+  // O X-Requested-With evita que o navegador abra a janela de login nativa dele.
+  const headers: Record<string, string> = session
+    ? { Authorization: session.authorization, "X-Requested-With": "XMLHttpRequest" }
+    : {};
   const navigate = (next: Route) => {
     location.hash = next;
     setRoute(next);
@@ -62,9 +65,9 @@ export default function App() {
   useEffect(() => {
     const fn = () => setRoute((location.hash.slice(1) as Route) || "dashboard");
     addEventListener("hashchange", fn);
-    void load();
+    if (session) void load();
     return () => removeEventListener("hashchange", fn);
-  }, [user]);
+  }, [session]);
   const online = useMemo(
     () =>
       devices.filter(
@@ -149,6 +152,15 @@ export default function App() {
     setMessage(r.ok ? "Código salvo." : "Falha ao salvar código.");
     await load();
   };
+  const logout = () => {
+    setSession(null);
+    setDevices([]);
+    setFirmware({ devices: {} });
+    setSelected(null);
+    setForm(emptyForm);
+    setMessage("");
+  };
+  if (!session) return <Login onLogin={setSession} />;
   const title =
     route === "dashboard"
       ? "Mapa operacional"
@@ -192,11 +204,13 @@ export default function App() {
           ))}
         </nav>
         <div className="userbox">
-          <small>USUÁRIO DO LAB</small>
-          <select value={user} onChange={(e) => setUser(e.target.value)}>
-            <option value="teacher">teacher</option>
-            <option value="student">student</option>
-          </select>
+          <small>USUÁRIO CONECTADO</small>
+          <p className="who">
+            <b>{session.username}</b> · {roleLabel(session.role)}
+          </p>
+          <button className="logout" onClick={logout}>
+            Sair
+          </button>
           <p>Dados fictícios. Execução somente local.</p>
         </div>
       </aside>
@@ -205,7 +219,7 @@ export default function App() {
           <div>
             <span className="kicker">FRIDGE LAB / {route.toUpperCase()}</span>
             <h1>{title}</h1>
-            <p>Monitoramento seguro de uma frota de geladeiras simuladas.</p>
+            <p>Monitoramento de uma frota de geladeiras simuladas.</p>
           </div>
           <div className="health">
             <i /> SISTEMA OPERACIONAL
@@ -256,6 +270,55 @@ export default function App() {
         )}{" "}
         {message && <div className="toast">{message}</div>}
       </main>
+    </div>
+  );
+}
+function Login({ onLogin }: { onLogin: (session: Session) => void }) {
+  const [username, setUsername] = useState(""),
+    [password, setPassword] = useState(""),
+    [error, setError] = useState("");
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const authorization = `Basic ${btoa(`${username}:${password}`)}`;
+    const r = await fetch("/api/me", {
+      headers: { Authorization: authorization, "X-Requested-With": "XMLHttpRequest" },
+    });
+    if (!r.ok) {
+      setError("Usuário ou senha inválidos.");
+      return;
+    }
+    const me = await r.json();
+    onLogin({ username: me.username, role: me.role, authorization });
+  };
+  return (
+    <div className="login-screen">
+      <form className="login-card" onSubmit={submit}>
+        <div className="logo">
+          FRIDGE<span>LAB</span>
+        </div>
+        <p className="caption">SIMULADOR IoT DIDÁTICO</p>
+        <label>
+          Usuário
+          <input
+            required
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </label>
+        <label>
+          Senha
+          <input
+            required
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        {error && <p className="login-error">{error}</p>}
+        <button type="submit">Entrar</button>
+      </form>
     </div>
   );
 }
@@ -619,7 +682,7 @@ function Firmware({
             </div>
             <p className="helper">
               Edite o sketch didático e salve no dispositivo simulado. A
-              aplicação da temperatura usa o endpoint protegido do firmware.
+              configuração é enviada ao simulador de firmware pela API.
             </p>
             <textarea
               className="code big"
